@@ -1,0 +1,64 @@
+# Worker Dockerfile
+# Builds and runs the BullMQ report generation worker process
+
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy .npmrc for private registry access
+COPY .npmrc ./
+
+# Copy package files
+COPY package.json ./
+COPY pnpm-lock.yaml* ./
+
+# Install dependencies
+RUN pnpm install --no-frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm in production image
+RUN npm install -g pnpm
+
+# Copy .npmrc for private registry access
+COPY .npmrc ./
+
+# Copy package files
+COPY package.json ./
+COPY pnpm-lock.yaml* ./
+
+# Install all dependencies (need tsx for running TypeScript)
+RUN pnpm install --no-frozen-lockfile
+
+# Copy worker source files
+COPY --from=builder /app/worker ./worker
+
+# Copy lib directory (needed by worker)
+COPY --from=builder /app/lib ./lib
+
+# Copy app directory if needed
+COPY --from=builder /app/app ./app
+
+# Copy node_modules from builder (includes tsx)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Environment variables
+ENV NODE_ENV=production
+ENV REDIS_HOST=redis
+ENV REDIS_PORT=6379
+
+# Health check (check if worker process is running and can connect to Redis)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "const redis = require('redis'); const client = redis.createClient({host: process.env.REDIS_HOST || 'localhost', port: process.env.REDIS_PORT || 6379}); client.connect().then(() => process.exit(0)).catch(() => process.exit(1))" || exit 1
+
+# Run the worker with tsx
+CMD ["npx", "tsx", "worker/index.ts"]

@@ -1,0 +1,115 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: reporting-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - reporting-network
+    labels:
+      - "user=tnikhil"
+      - "description=Redis for Report Job Queue"
+
+  reporting-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: reporting-framework:latest
+    container_name: reporting-ui
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PLUGINS_DIR=/shared/reporting-framework/plugins
+      - REPORTS_DIR=/shared/reporting-framework/reports
+      - BUNDLES_DIR=/shared/reporting-framework/bundles
+      - WORKER_CONCURRENCY=2
+    volumes:
+      # Shared framework directory (plugins, bundles) - read-only
+      - /shared/reporting-framework:/shared/reporting-framework:ro
+      # Reports directory - read-write (needs to write report files)
+      - /shared/reporting-framework/reports:/shared/reporting-framework/reports:rw
+      # API keys configuration - read-write (needs to save profiles)
+      # Mount your ~/.framework-cli/config.json for API keys
+      - ${HOME}/.framework-cli/config.json:/root/.framework-cli/config.json:rw
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - reporting-network
+    restart: unless-stopped
+    labels:
+      - "user=tnikhil"
+      - "description=LLM Report Generation UI"
+      - "port=3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://0.0.0.0:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  reporting-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: reporting-worker:latest
+    container_name: reporting-worker
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PLUGINS_DIR=/shared/reporting-framework/plugins
+      - REPORTS_DIR=/shared/reporting-framework/reports
+      - BUNDLES_DIR=/shared/reporting-framework/bundles
+      - WORKER_CONCURRENCY=2
+    volumes:
+      # Shared framework directory (plugins, bundles) - read-only
+      - /shared/reporting-framework:/shared/reporting-framework:ro
+      # Reports directory - read-write (needs to write report files)
+      - /shared/reporting-framework/reports:/shared/reporting-framework/reports:rw
+      # API keys configuration - read-only
+      # Mount your ~/.framework-cli/config.json for API keys
+      - ${HOME}/.framework-cli/config.json:/root/.framework-cli/config.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - reporting-network
+    restart: unless-stopped
+    labels:
+      - "user=tnikhil"
+      - "description=Background Worker for Report Generation"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "redis", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  reporting-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
