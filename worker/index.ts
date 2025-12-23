@@ -59,35 +59,30 @@ async function processJob(
       },
     });
 
-    if (result.success) {
-      console.log(`\n[Worker] ✓ Job ${job.id} completed successfully`);
-      console.log(`[Worker] Duration: ${result.stats.duration}ms`);
-      console.log(`[Worker] LLM calls: ${result.stats.llmCallsCount}`);
-      console.log(
-        `[Worker] Outputs: ${Object.keys(result.outputs).join(", ")}`
-      );
-    } else {
+    // ✅ FIX: If result indicates failure, throw error to mark job as failed in BullMQ
+    if (!result.success) {
       console.log(`\n[Worker] ❌ Job ${job.id} failed: ${result.error}`);
+
+      // Throw error so BullMQ marks this job as "failed" instead of "completed"
+      throw new Error(result.error || "Report generation failed");
     }
+
+    // Job succeeded
+    console.log(`\n[Worker] ✓ Job ${job.id} completed successfully`);
+    console.log(`[Worker] Duration: ${result.stats.duration}ms`);
+    console.log(`[Worker] LLM calls: ${result.stats.llmCallsCount}`);
+    console.log(`[Worker] Outputs: ${Object.keys(result.outputs).join(", ")}`);
 
     return result;
   } catch (error) {
     console.error(
-      `[Worker] ❌ Unexpected error processing job ${job.id}:`,
-      error
+      `[Worker] ❌ Error processing job ${job.id}:`,
+      error instanceof Error ? error.message : error
     );
 
-    return {
-      success: false,
-      reportPath: "",
-      outputs: {},
-      stats: {
-        duration: 0,
-        llmCallsCount: 0,
-      },
-      error:
-        error instanceof Error ? error.message : "Unexpected error occurred",
-    };
+    // ✅ FIX: Re-throw the error so BullMQ marks the job as failed
+    // Don't return a result object - let BullMQ handle the failure state
+    throw error;
   }
 }
 

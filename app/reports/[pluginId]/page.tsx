@@ -1,7 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Navigation } from "@/components/Navigation";
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { FileText, Loader2, AlertCircle, Calendar } from "lucide-react";
 import Link from "next/link";
+
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0 },
+};
 
 interface Report {
   pluginId: string;
@@ -12,6 +31,13 @@ interface Report {
   createdAtIso: string;
 }
 
+const PLUGIN_ICONS: Record<string, string> = {
+  patent: "📋",
+  pubmed: "📚",
+  staffing: "👥",
+  default: "📄",
+};
+
 export default function PluginReportsPage({
   params,
 }: {
@@ -21,12 +47,20 @@ export default function PluginReportsPage({
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    if (isMountedRef.current) return;
+    isMountedRef.current = true;
+
     params.then((resolvedParams) => {
       setPluginId(resolvedParams.pluginId);
       fetchPluginReports(resolvedParams.pluginId);
     });
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [params]);
 
   const fetchPluginReports = async (plugId: string) => {
@@ -51,37 +85,17 @@ export default function PluginReportsPage({
   };
 
   const getPluginIcon = (id: string) => {
-    const icons: Record<string, string> = {
-      patent: "📋",
-      pubmed: "📚",
-      staffing: "👥",
-    };
-    return icons[id] || "📄";
+    return PLUGIN_ICONS[id] || PLUGIN_ICONS.default;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-        <header className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <Link
-              href="/reports"
-              className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              ← Back to Reports
-            </Link>
-          </div>
-        </header>
-        <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center py-24">
-            <div className="text-center">
-              <div className="mb-4 inline-block">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 dark:border-gray-600 dark:border-t-blue-400"></div>
-              </div>
-              <p className="text-gray-600 dark:text-gray-400">
-                Loading reports...
-              </p>
-            </div>
+      <div className="flex min-h-screen flex-col bg-background">
+        <Navigation />
+        <main className="flex flex-1 items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+            <p className="mt-4 text-muted-foreground">Loading reports...</p>
           </div>
         </main>
       </div>
@@ -89,80 +103,135 @@ export default function PluginReportsPage({
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div>
+    <div className="flex min-h-screen flex-col bg-background">
+      <Navigation />
+
+      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="space-y-8"
+          >
+            {/* Header */}
+            <motion.div variants={item}>
               <Link
                 href="/reports"
-                className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 mb-4 transition-colors"
               >
                 ← Back to Reports
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                {getPluginIcon(pluginId)} Reports
-              </h1>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {reports.length} report{reports.length !== 1 ? "s" : ""}{" "}
-                available
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-900/20 dark:bg-red-900/10">
-            <h2 className="font-semibold text-red-800 dark:text-red-300">
-              Error
-            </h2>
-            <p className="mt-2 text-red-700 dark:text-red-400">{error}</p>
-          </div>
-        ) : reports.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-12 text-center dark:border-gray-700 dark:bg-slate-800">
-            <p className="mb-4 text-gray-600 dark:text-gray-400">
-              No reports available for this plugin yet.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {reports.map((report) => (
-              <Link
-                key={`${report.pluginId}-${report.reportBaseName}`}
-                href={`/reports/${report.pluginId}/${report.reportBaseName}/view`}
-              >
-                <div className="h-full rounded-lg border-2 border-gray-200 bg-white p-6 shadow-sm transition-all duration-200 hover:border-blue-400 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 hover:scale-105 cursor-pointer">
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {report.reportName}
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Generated on{" "}
-                      {new Date(report.createdAtIso).toLocaleDateString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )}
-                    </p>
-                    <div className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium pt-2">
-                      <span>View Report</span>
-                      <span>→</span>
-                    </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-4xl">{getPluginIcon(pluginId)}</span>
+                    <h1 className="text-4xl font-bold text-foreground">
+                      {pluginId.charAt(0).toUpperCase() + pluginId.slice(1)}{" "}
+                      Reports
+                    </h1>
                   </div>
+                  <p className="mt-2 text-muted-foreground">
+                    {reports.length} report{reports.length !== 1 ? "s" : ""}{" "}
+                    available
+                  </p>
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
+              </div>
+            </motion.div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                variants={item}
+                className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3"
+              >
+                <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-destructive">
+                    Error
+                  </h3>
+                  <p className="mt-1 text-sm text-destructive">{error}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Empty State */}
+            {!error && reports.length === 0 && (
+              <motion.div
+                variants={item}
+                className="rounded-2xl border border-dashed bg-card/50 p-12 text-center"
+              >
+                <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold text-foreground">
+                  No reports available for this pipeline yet
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Generate a report to see it here
+                </p>
+                <Button
+                  asChild
+                  className="mt-6 bg-gradient-to-r from-primary to-secondary"
+                >
+                  <Link href="/generate">Generate Report</Link>
+                </Button>
+              </motion.div>
+            )}
+
+            {/* Reports Grid */}
+            {!error && reports.length > 0 && (
+              <motion.div
+                variants={container}
+                className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+              >
+                {reports.map((report) => (
+                  <motion.div
+                    key={`${report.pluginId}-${report.reportBaseName}`}
+                    variants={item}
+                    whileHover={{ y: -4 }}
+                  >
+                    <Link
+                      href={`/reports/${report.pluginId}/${report.reportBaseName}/view`}
+                    >
+                      <div className="group h-full rounded-xl border bg-card p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/30 cursor-pointer">
+                        <div className="space-y-3">
+                          {/* Report Name */}
+                          <h3 className="text-lg font-semibold text-card-foreground line-clamp-2">
+                            {report.reportName}
+                          </h3>
+
+                          {/* Date */}
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            <span>
+                              {new Date(report.createdAtIso).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Link */}
+                          <div className="inline-flex items-center gap-2 text-primary font-medium text-sm group-hover:gap-3 transition-all pt-2">
+                            <span>View Report</span>
+                            <span className="transition-transform group-hover:translate-x-1">
+                              →
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
       </main>
     </div>
   );
