@@ -70,6 +70,30 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+// ✅ Helper function for viewing reports in Next.js UI
+function getReportViewUrl(filePath: string, pluginId: string): string {
+  // Extract filename from path: /shared/reporting-framework/reports/pubmed/phenotype.html
+  // → phenotype
+  const parts = filePath.split("/");
+  const filename = parts[parts.length - 1]; // e.g., "phenotype.html"
+  const reportBaseName = filename.replace(/\.(html|md|pdf)$/, ""); // Remove extension
+
+  // Construct Next.js route: /reports/{pluginId}/{reportBaseName}/view
+  return `/reports/${pluginId}/${reportBaseName}/view`;
+}
+
+// ✅ Helper function for PDF download using existing API route
+function getReportDownloadUrl(filePath: string, pluginId: string): string {
+  // Extract filename from path: /shared/reporting-framework/reports/pubmed/phenotype.pdf
+  // → phenotype
+  const parts = filePath.split("/");
+  const filename = parts[parts.length - 1];
+  const reportBaseName = filename.replace(/\.(html|md|pdf)$/, "");
+
+  // Use existing API route: /api/reports/{pluginId}/{reportBaseName}?format=pdf
+  return `/api/reports/${pluginId}/${reportBaseName}?format=pdf`;
+}
+
 export default function JobsPage() {
   const [allJobs, setAllJobs] = useState<Job[]>([]); // Store all jobs
   const [loading, setLoading] = useState(true);
@@ -550,7 +574,13 @@ export default function JobsPage() {
                         <>
                           {job.outputs.html && (
                             <Button size="sm" className="flex-1" asChild>
-                              <Link href={job.outputs.html} target="_blank">
+                              {/* ✅ FIXED: Use Next.js view route instead of file path */}
+                              <Link
+                                href={getReportViewUrl(
+                                  job.outputs.html,
+                                  job.pluginId
+                                )}
+                              >
                                 <FileText className="h-4 w-4" />
                                 <span>View Report</span>
                                 <ExternalLink className="h-3 w-3" />
@@ -564,9 +594,13 @@ export default function JobsPage() {
                               className="flex-1"
                               asChild
                             >
+                              {/* ✅ FIXED: Use existing API route for PDF download */}
                               <a
-                                href={job.outputs.pdf}
-                                download={`${job.reportName}.pdf`}
+                                href={getReportDownloadUrl(
+                                  job.outputs.pdf,
+                                  job.pluginId
+                                )}
+                                download
                               >
                                 <Download className="h-4 w-4" />
                                 <span>PDF</span>

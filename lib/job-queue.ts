@@ -70,11 +70,13 @@ class JobQueue {
     const jobData: ReportJobData = {
       pluginId: pipelineId,
       reportName,
-      query: query, // ✅ CHANGED: Pass query directly (plugin-specific structure)
+      query: query, // Pass query directly (plugin-specific structure)
       config: {
+        // ✅ FIXED: Remove hardcoded model fallback
+        // Let worker read from profile config (~/.framework-cli/config.json)
         llmProvider: query.llmProvider || "gemini",
-        llmModel: query.llmModel || "gemini-2.0-flash-exp",
-        outputFormats: ["html", "md", "pdf"],
+        llmModel: query.llmModel || "", // Empty = worker will read from profile
+        outputFormats: query.outputFormats || ["html", "md", "pdf"],
         temperature: query.temperature,
         maxTokens: query.maxTokens,
       },
@@ -121,7 +123,7 @@ class JobQueue {
       status: mapJobStatus(jobStatus.state),
       pipelineId: jobStatus.data?.pluginId || "",
       reportName: jobStatus.data?.reportName || "",
-      query: jobStatus.data?.query || {}, // ✅ CHANGED: Return raw query
+      query: jobStatus.data?.query || {},
       reportType: "standard",
       format: jobStatus.data?.config.outputFormats[0] || "html",
       createdAt: jobStatus.createdAt

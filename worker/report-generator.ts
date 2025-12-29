@@ -78,16 +78,17 @@ async function retryWithBackoff<T>(
 }
 
 /**
- * Get LLM configuration from environment, profile config, or job config
+ * Get LLM configuration from profile config, job config, or environment variables
+ * Priority: Profile Config > Job Config > Environment Variables
  */
 async function getLLMConfig(jobConfig: ReportJobData["config"]) {
-  const config = {
+  let config = {
     provider: jobConfig.llmProvider as "gemini" | "openai" | "deepseek",
     model: jobConfig.llmModel,
     apiKey: "",
   };
 
-  // First, try to get API key from user's profile configuration
+  // ✅ FIXED: Read FULL config from profile (not just API key)
   try {
     const os = await import("os");
     const fs = await import("fs/promises");
@@ -97,26 +98,52 @@ async function getLLMConfig(jobConfig: ReportJobData["config"]) {
     const configContent = await fs.readFile(configPath, "utf-8");
     const profileConfig = JSON.parse(configContent);
 
-    // Get the default profile or find a profile matching this provider/model
     const defaultProfileName = profileConfig.defaultProfile;
     const profiles = profileConfig.profiles || {};
 
     if (defaultProfileName && profiles[defaultProfileName]) {
       const profile = profiles[defaultProfileName];
+
+      // ✅ Use provider and model from profile if not specified in job config
+      if (!jobConfig.llmModel || jobConfig.llmModel === "") {
+        config.provider = profile.provider || config.provider;
+        config.model = profile.model || config.model;
+      }
+
+      // Always prefer API key from profile
       config.apiKey = profile.apiKey || "";
+
       console.log(
-        `[ReportGenerator] Using API key from profile: ${defaultProfileName}`
+        `[ReportGenerator] Using config from profile: ${defaultProfileName} (${config.provider}/${config.model})`
+      );
+    } else {
+      console.warn(
+        `[ReportGenerator] Default profile not found in config.json`
       );
     }
   } catch (error) {
     console.warn(
-      `[ReportGenerator] Could not read profile config, falling back to environment variables:`,
+      `[ReportGenerator] Could not read profile config (~/.framework-cli/config.json):`,
       error instanceof Error ? error.message : "Unknown error"
+    );
+    console.warn(
+      `[ReportGenerator] Falling back to job config and environment variables`
+    );
+  }
+
+  // Validate that we have a model
+  if (!config.model || config.model === "") {
+    throw new Error(
+      `LLM model not configured. Please set up a profile in ~/.framework-cli/config.json or provide llmModel in the request.`
     );
   }
 
   // Fall back to environment variables if no API key from profile
   if (!config.apiKey) {
+    console.log(
+      `[ReportGenerator] No API key in profile, checking environment variables...`
+    );
+
     switch (config.provider) {
       case "gemini":
         config.apiKey =
@@ -135,9 +162,17 @@ async function getLLMConfig(jobConfig: ReportJobData["config"]) {
 
   if (!config.apiKey) {
     throw new Error(
-      `API key not configured for provider: ${config.provider}. Set API key in profile (via UI) or environment variable.`
+      `API key not configured for provider: ${config.provider}. ` +
+        `Please set up a profile in ~/.framework-cli/config.json with an API key, ` +
+        `or set the ${config.provider.toUpperCase()}_API_KEY environment variable.`
     );
   }
+
+  console.log(
+    `[ReportGenerator] Final LLM Config: ${config.provider} / ${
+      config.model
+    } (API key: ${config.apiKey.substring(0, 8)}...)`
+  );
 
   return config;
 }
@@ -354,12 +389,19 @@ export async function generateReport(
     const outputs: ReportJobResult["outputs"] = {};
 
     // Step 8: Render and save outputs (90-100%)
-    // Always generate all three formats: HTML, Markdown, and PDF
-    const allFormats = ["html", "md", "pdf"] as const;
+    // ✅ FIXED: Respect requested output formats from job config
+    const requestedFormats =
+      jobData.config.outputFormats.length > 0
+        ? jobData.config.outputFormats
+        : (["html", "md", "pdf"] as const);
 
-    for (let i = 0; i < allFormats.length; i++) {
-      const format = allFormats[i];
-      const progress = 8 + (i + 1) / allFormats.length;
+    console.log(
+      `[ReportGenerator] Generating formats: ${requestedFormats.join(", ")}`
+    );
+
+    for (let i = 0; i < requestedFormats.length; i++) {
+      const format = requestedFormats[i];
+      const progress = 8 + (i + 1) / requestedFormats.length;
       updateProgress(
         "Rendering outputs",
         progress,
