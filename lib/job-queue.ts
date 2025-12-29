@@ -70,15 +70,10 @@ class JobQueue {
     const jobData: ReportJobData = {
       pluginId: pipelineId,
       reportName,
-      query: {
-        keywords: query.keywords || "",
-        startDate: query.startDate,
-        endDate: query.endDate,
-        numberOfArticles: query.numberOfArticles || 500,
-      },
+      query: query, // ✅ CHANGED: Pass query directly (plugin-specific structure)
       config: {
         llmProvider: query.llmProvider || "gemini",
-        llmModel: query.llmModel || "gemini-2.5-flash-lite",
+        llmModel: query.llmModel || "gemini-2.0-flash-exp",
         outputFormats: ["html", "md", "pdf"],
         temperature: query.temperature,
         maxTokens: query.maxTokens,
@@ -126,14 +121,7 @@ class JobQueue {
       status: mapJobStatus(jobStatus.state),
       pipelineId: jobStatus.data?.pluginId || "",
       reportName: jobStatus.data?.reportName || "",
-      query: {
-        keywords: jobStatus.data?.query.keywords,
-        startDate: jobStatus.data?.query.startDate,
-        endDate: jobStatus.data?.query.endDate,
-        numberOfArticles: jobStatus.data?.query.numberOfArticles,
-        llmProvider: jobStatus.data?.config.llmProvider,
-        llmModel: jobStatus.data?.config.llmModel,
-      },
+      query: jobStatus.data?.query || {}, // ✅ CHANGED: Return raw query
       reportType: "standard",
       format: jobStatus.data?.config.outputFormats[0] || "html",
       createdAt: jobStatus.createdAt

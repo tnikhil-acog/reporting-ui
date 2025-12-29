@@ -12,12 +12,7 @@ import { getRedisClient } from "./redis";
 export interface ReportJobData {
   pluginId: string;
   reportName: string;
-  query: {
-    keywords: string;
-    startDate?: string;
-    endDate?: string;
-    numberOfArticles: number;
-  };
+  query: Record<string, any>; // ✅ CHANGED: Accept any plugin's query structure
   config: {
     llmProvider: string;
     llmModel: string;

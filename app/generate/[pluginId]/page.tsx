@@ -1,25 +1,18 @@
 "use client";
 
-import { useState, useEffect, FormEvent, ChangeEvent, use } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
+import { DynamicPluginForm } from "@/components/DynamicPluginForm";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  ArrowLeft,
-  Sparkles,
-  Calendar,
-  Hash,
-  FileText,
-  Settings,
-} from "lucide-react";
+import { ArrowLeft, Settings, FileText } from "lucide-react";
 
 interface Plugin {
   id: string;
   name: string;
-  version: string;
+  version?: string;
   description: string;
 }
 
@@ -49,13 +42,7 @@ export default function GeneratePluginPage({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Form state
   const [reportName, setReportName] = useState("");
-  const [keywords, setKeywords] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [numberOfArticles, setNumberOfArticles] = useState("500");
 
   useEffect(() => {
     fetchPlugin(pluginId);
@@ -87,16 +74,9 @@ export default function GeneratePluginPage({
     }
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
+  const handleSubmit = async (formData: Record<string, any>) => {
     if (!reportName.trim()) {
       setError("Please enter a report name");
-      return;
-    }
-
-    if (!keywords.trim()) {
-      setError("Please enter keywords");
       return;
     }
 
@@ -112,12 +92,7 @@ export default function GeneratePluginPage({
         body: JSON.stringify({
           pipelineId: pluginId,
           reportName,
-          query: {
-            keywords,
-            startDate: startDate || undefined,
-            endDate: endDate || undefined,
-            numberOfArticles: parseInt(numberOfArticles) || 500,
-          },
+          query: formData,
         }),
       });
 
@@ -230,184 +205,44 @@ export default function GeneratePluginPage({
               </div>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Report Name */}
-              <motion.div variants={item}>
-                <label
-                  htmlFor="reportName"
-                  className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
-                >
-                  <FileText className="h-4 w-4 text-primary" />
-                  Report Name *
-                </label>
-                <input
-                  id="reportName"
-                  type="text"
-                  value={reportName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setReportName(e.target.value)
-                  }
-                  placeholder="Enter a descriptive report name"
-                  required
-                  disabled={submitting}
-                  className="w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  This will be used as the title for your report
-                </p>
-              </motion.div>
-
-              {/* Keywords */}
-              <motion.div variants={item}>
-                <label
-                  htmlFor="keywords"
-                  className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
-                >
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Keywords *
-                </label>
-                <textarea
-                  id="keywords"
-                  value={keywords}
-                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                    setKeywords(e.target.value)
-                  }
-                  placeholder="Enter search keywords (comma-separated for multiple)"
-                  required
-                  disabled={submitting}
-                  rows={3}
-                  className="w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 resize-none"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Example: "machine learning, AI, neural networks" or "cancer
-                  treatment, drug discovery"
-                </p>
-              </motion.div>
-
-              {/* Date Range */}
-              <motion.div
-                variants={item}
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            {/* Report Name Field (Always Present) */}
+            <div className="mb-8">
+              <label
+                htmlFor="reportName"
+                className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
               >
-                <div>
-                  <label
-                    htmlFor="startDate"
-                    className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
-                  >
-                    <Calendar className="h-4 w-4 text-primary" />
-                    Start Date
-                  </label>
-                  <input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                      setStartDate(e.target.value)
-                    }
-                    disabled={submitting}
-                    className="w-full rounded-lg border bg-background px-4 py-3 text-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  />
-                </div>
+                <FileText className="h-4 w-4 text-primary" />
+                Report Name
+                <span className="text-primary">*</span>
+              </label>
+              <input
+                id="reportName"
+                type="text"
+                value={reportName}
+                onChange={(e) => setReportName(e.target.value)}
+                placeholder="Enter a descriptive report name"
+                required
+                disabled={submitting}
+                className="w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                This will be used as the title for your report
+              </p>
+            </div>
 
-                <div>
-                  <label
-                    htmlFor="endDate"
-                    className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
-                  >
-                    <Calendar className="h-4 w-4 text-primary" />
-                    End Date
-                  </label>
-                  <input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                      setEndDate(e.target.value)
-                    }
-                    disabled={submitting}
-                    className="w-full rounded-lg border bg-background px-4 py-3 text-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  />
-                </div>
-              </motion.div>
-
-              {/* Number of Articles */}
-              <motion.div variants={item}>
-                <label
-                  htmlFor="numberOfArticles"
-                  className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3"
-                >
-                  <Hash className="h-4 w-4 text-primary" />
-                  Number of Articles
-                </label>
-                <input
-                  id="numberOfArticles"
-                  type="number"
-                  value={numberOfArticles}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setNumberOfArticles(e.target.value)
-                  }
-                  min="1"
-                  max="10000"
-                  disabled={submitting}
-                  className="w-full rounded-lg border bg-background px-4 py-3 text-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Maximum: 10,000 articles (Default: 500)
-                </p>
-              </motion.div>
-
-              {/* Error Alert */}
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="rounded-xl border border-destructive/50 bg-destructive/10 p-4"
-                >
-                  <p className="text-sm text-destructive">{error}</p>
-                </motion.div>
-              )}
-
-              {/* Submit Buttons */}
-              <motion.div variants={item} className="flex gap-3 pt-6 border-t">
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  size="lg"
-                  className="group flex-1 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                      <span>Creating Job...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-5 w-5" />
-                      <span>Generate Report</span>
-                      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  onClick={() => router.push("/generate")}
-                  disabled={submitting}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-              </motion.div>
-            </form>
+            {/* Dynamic Plugin Form */}
+            <div className="border-t pt-6">
+              <DynamicPluginForm
+                pluginId={pluginId}
+                pluginName={plugin?.name || ""}
+                onSubmit={handleSubmit}
+                submitting={submitting}
+                error={error}
+              />
+            </div>
 
             {/* Profile Management */}
-            <motion.div
-              variants={item}
-              className="mt-8 border-t pt-6 text-center"
-            >
+            <div className="mt-8 border-t pt-6 text-center">
               <p className="mb-3 text-sm text-muted-foreground">
                 Need to configure your LLM profiles?
               </p>
@@ -422,7 +257,7 @@ export default function GeneratePluginPage({
                   <span>Manage Profiles</span>
                 </Link>
               </Button>
-            </motion.div>
+            </div>
           </motion.div>
         </motion.div>
       </main>

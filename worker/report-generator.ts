@@ -2,8 +2,8 @@
  * Report Generator for Worker Process
  *
  * Handles the complete report generation workflow:
- * 1. Load bundle data
- * 2. Load plugin
+ * 1. Load plugin
+ * 2. Fetch data using plugin's ingestFromAPI method
  * 3. Generate report using ReportEngine
  * 4. Render outputs (HTML, MD, PDF)
  * 5. Save to shared volume
@@ -20,8 +20,6 @@ import type {
 
 const REPORTS_DIR =
   process.env.REPORTS_DIR || "/shared/reporting-framework/reports";
-const BUNDLES_DIR =
-  process.env.BUNDLES_DIR || "/shared/reporting-framework/bundles";
 
 export interface GenerateReportOptions {
   jobData: ReportJobData;
@@ -77,33 +75,6 @@ async function retryWithBackoff<T>(
   }
 
   throw lastError || new Error("Retry failed");
-}
-
-/**
- * Load bundle data from file
- */
-async function loadBundle(bundlePath: string): Promise<any> {
-  console.log(`[ReportGenerator] Loading bundle: ${bundlePath}`);
-
-  try {
-    const content = await fs.readFile(bundlePath, "utf-8");
-    const bundle = JSON.parse(content);
-
-    console.log(`[ReportGenerator] ✓ Bundle loaded:`, {
-      source: bundle.source,
-      records: bundle.records?.length || 0,
-      hasStats: !!bundle.stats,
-    });
-
-    return bundle;
-  } catch (error) {
-    console.error("[ReportGenerator] Failed to load bundle:", error);
-    throw new Error(
-      `Failed to load bundle from ${bundlePath}: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`
-    );
-  }
 }
 
 /**
@@ -225,81 +196,57 @@ export async function generateReport(
       `[ReportGenerator] ✓ Plugin ${jobData.pluginId} loaded and verified`
     );
 
-    // Step 2: Fetch data from plugin using keywords (20-30%)
+    // Step 2: Fetch data from plugin (20-30%)
     updateProgress(
       "Fetching data",
       2,
       10,
-      `Searching for: ${jobData.query.keywords}`
+      `Fetching data using ${jobData.pluginId} plugin`
     );
 
-    console.log(`[ReportGenerator] Fetching data with query:`, jobData.query);
+    console.log(`[ReportGenerator] Plugin: ${jobData.pluginId}`);
+    console.log(
+      `[ReportGenerator] Query:`,
+      JSON.stringify(jobData.query, null, 2)
+    );
 
     let bundle: any;
 
-    // Fetch data using the plugin's API methods
+    // Fetch data using the plugin's ingestFromAPI method (framework standard)
     try {
-      // Step 2a: Fetch raw data from PubMed API with retry logic
-      if (typeof plugin.fetchFromAPI === "function") {
-        console.log(
-          `[ReportGenerator] Calling plugin.fetchFromAPI with keywords: ${jobData.query.keywords}`
-        );
-        console.log(
-          `[ReportGenerator] Query params:`,
-          JSON.stringify({
-            term: jobData.query.keywords,
-            maxResults: jobData.query.numberOfArticles || 500,
-          })
-        );
-
-        // Wrap API call with retry logic (3 retries with exponential backoff)
-        const apiResponse = await retryWithBackoff(
-          async () => {
-            return await plugin.fetchFromAPI({
-              term: jobData.query.keywords,
-              maxResults: jobData.query.numberOfArticles || 500,
-              email: "reporting-framework@aganitha.ai",
-            });
-          },
-          3, // maxRetries
-          2000, // initialDelay: 2 seconds
-          15000 // maxDelay: 15 seconds
-        );
-
-        console.log(
-          `[ReportGenerator] ✓ Fetched ${
-            apiResponse.pmids?.length || 0
-          } PMIDs with ${apiResponse.xmlData?.length || 0} XML records from API`
-        );
-
-        // Step 2b: Process and normalize the API data into a bundle
-        if (typeof plugin.processAPIData === "function") {
-          console.log(`[ReportGenerator] Processing API data into bundle...`);
-
-          bundle = await plugin.processAPIData(apiResponse);
-
-          console.log(
-            `[ReportGenerator] ✓ Bundle created with ${
-              bundle.records?.length || 0
-            } normalized records`
-          );
-          console.log(
-            `[ReportGenerator] ✓ Bundle stats:`,
-            JSON.stringify(bundle.stats || {}, null, 2)
-          );
-        } else {
-          throw new Error(
-            "Plugin does not support processAPIData - cannot create bundle"
-          );
-        }
-      } else {
+      // Check if plugin supports API ingestion
+      if (typeof plugin.ingestFromAPI !== "function") {
         throw new Error(
-          "Plugin does not support fetchFromAPI - cannot fetch data"
+          `Plugin ${jobData.pluginId} does not support API ingestion (missing ingestFromAPI method)`
         );
       }
+
+      // Call plugin with raw query (plugin handles validation/transformation)
+      // Wrap API call with retry logic (3 retries with exponential backoff)
+      const result = await retryWithBackoff(
+        async () => {
+          return await plugin.ingestFromAPI(jobData.query);
+        },
+        3, // maxRetries
+        2000, // initialDelay: 2 seconds
+        15000 // maxDelay: 15 seconds
+      );
+
+      // Extract bundle from result
+      bundle = result.bundle;
+
+      console.log(
+        `[ReportGenerator] ✓ Bundle created with ${
+          bundle.records?.length || 0
+        } normalized records`
+      );
+      console.log(
+        `[ReportGenerator] ✓ Bundle stats:`,
+        JSON.stringify(bundle.stats || {}, null, 2)
+      );
     } catch (fetchError) {
       console.error(
-        `[ReportGenerator] ❌ Failed to fetch/process data:`,
+        `[ReportGenerator] ✗ Failed to fetch/process data:`,
         fetchError
       );
 
@@ -314,9 +261,9 @@ export async function generateReport(
       }
 
       throw new Error(
-        `Data fetching failed: ${
+        `Data fetching failed for plugin ${jobData.pluginId}: ${
           fetchError instanceof Error ? fetchError.message : "Unknown error"
-        }. Check if NCBI PubMed API is accessible and rate limits are not exceeded.`
+        }. Check if the external API is accessible and rate limits are not exceeded.`
       );
     }
 
@@ -403,7 +350,6 @@ export async function generateReport(
     await fs.mkdir(reportDir, { recursive: true });
 
     const sanitizedName = sanitizeFilename(jobData.reportName);
-    const timestamp = Date.now();
 
     const outputs: ReportJobResult["outputs"] = {};
 
@@ -507,7 +453,7 @@ export async function generateReport(
 
     return result;
   } catch (error) {
-    console.error("[ReportGenerator] ❌ Error generating report:", error);
+    console.error("[ReportGenerator] ✗ Error generating report:", error);
 
     const duration = Date.now() - startTime;
 
